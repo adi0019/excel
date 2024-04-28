@@ -1,0 +1,78 @@
+import csv
+import os
+from collections import defaultdict
+
+
+class CSVMapReduce:
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.data = []
+        self.check_file_exists()  # Check if the file exists during initialization
+        self.read_csv_data()  # Read CSV data during initialization
+
+    def check_file_exists(self):
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"File not found: {self.file_path}")
+
+    def read_csv_data(self):
+        with open(self.file_path, 'r') as file:
+            reader = csv.DictReader(file)
+            self.data = [row for row in reader]  # Read and store CSV data
+
+    def mapper(self, record):
+        passenger_class = record['Pclass']
+        survived = int(record['Survived'])
+        age = float(record['Age']) if record['Age'] else None
+
+        results = []
+        if age is not None:
+            if survived == 0:
+                results.append(('died_ages', age))
+            else:
+                results.append(('survived_ages', age))
+
+        results.append(('class_counts', (passenger_class, survived)))
+
+        return results
+
+    def reducer(self, key, values):
+        if key == 'died_ages':
+            avg_age = sum(values) / len(values)  # Calculate average age
+            return [('average_age_died', avg_age)]
+        elif key == 'class_counts':
+            class_counts = defaultdict(lambda: [0, 0])
+            for passenger_class, survived in values:
+                class_counts[passenger_class][survived] += 1
+            return [(f'class_{pc}_died', counts[0]) for pc, counts in class_counts.items()] + \
+                   [(f'class_{pc}_survived', counts[1]) for pc, counts in class_counts.items()]
+
+    def run_mapreduce(self):
+        # Map the data
+        mapped_data = []
+        for record in self.data:
+            mapped_data.extend(self.mapper(record))
+
+        # Reduce the data
+        reduced_data = defaultdict(list)
+        for key, value in mapped_data:
+            reduced_data[key].append(value)
+
+        # Apply the reducer
+        results = []
+        for key, values in reduced_data.items():
+            results.extend(self.reducer(key, values))
+
+        return results
+
+
+# Example usage
+if __name__ == '__main__':
+    file_path = r"C:/Users/Aditya/Downloads/train.csv"  # Correct file path
+    map_reduce = CSVMapReduce(file_path)
+
+    try:
+        results = map_reduce.run_mapreduce()  # Run the MapReduce process
+        for result in results:
+            print(result)  # Display the results
+    except FileNotFoundError as e:
+        print(e)
